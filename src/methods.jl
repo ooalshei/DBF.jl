@@ -1,12 +1,46 @@
 function doublebracket(
     operator::PauliSentence,
+    ham,
+    generator::PauliSentence,
+)
+    result = Dict{UInt,ComplexF64}()
+    for (hkey, hvalue) in ham, (gkey, gvalue) in generator
+        bg = gkey >> generator.qubits
+        bh = hkey >> generator.qubits
+        s1 = count_ones(bg & hkey)
+        s2 = count_ones(bh & gkey)
+        isodd(s1) ⊻ isodd(s2) || continue
+        ghkey = gkey ⊻ hkey
+        for (okey, ovalue) in operator
+            bo = okey >> generator.qubits
+            bhg = ghkey >> generator.qubits
+            s3 = count_ones(bo & ghkey)
+            s4 = count_ones(bhg & okey)
+            isodd(s3) ⊻ isodd(s4) || continue
+            key = okey ⊻ ghkey
+            value = 4 * hvalue * gvalue * ovalue * (-1)^(s1 + s3)
+            haskey(result, key) ? (result[key] += value) : (result[key] = value)
+        end
+    end
+    return result
+end
+
+function doublebracket(
+    operator::PauliSentence,
     ham::PauliSentence,
     generator::PauliSentence,
 )
-    sentence = 2 * generator * ham
-    filter!(p -> !isreal(im^(county(p.first, sentence.qubits)) * p.second), sentence)
-    sentence = 2 * operator * sentence
-    return filter!(p -> isreal(im^(county(p.first, sentence.qubits)) * p.second), sentence)
+    chunks = Iterators.partition(ham, cld(length(ham), Threads.nthreads()))
+    println(length(chunks))
+    println(length(ham))
+    tasks = map(chunks) do chunk
+        Threads.@spawn doublebracket(operator, chunk, generator)
+    end
+    result = Dict{UInt,ComplexF64}()
+    foreach(tasks) do task
+        mergewith!(+, result, fetch(task))
+    end
+    return PauliSentence(result, operator.qubits, iscopy=false)
 end
 
 function dbf23(
