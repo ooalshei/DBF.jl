@@ -1,6 +1,6 @@
 function doublebracket(
     operator::PauliSentence,
-    ham,
+    ham::Vector{<:Pair{<:Unsigned,<:Number}},
     generator::PauliSentence,
 )
     result = Dict{UInt,ComplexF64}()
@@ -31,8 +31,6 @@ function doublebracket(
     generator::PauliSentence,
 )
     chunks = Iterators.partition(ham, cld(length(ham), Threads.nthreads()))
-    println(length(chunks))
-    println(length(ham))
     tasks = map(chunks) do chunk
         Threads.@spawn doublebracket(operator, chunk, generator)
     end
